@@ -1,0 +1,5 @@
+pymongo
+netifaces
+psutil
+python-nmap
+psycopg2-binary
