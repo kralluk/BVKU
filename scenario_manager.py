@@ -1,5 +1,5 @@
 from database.mongodb import get_mongo_client
-import subprocess
+import subprocess, threading, os, signal
 
 # Nacteni scenare z DB
 def load_scenario_from_db(scenario_name):
@@ -15,67 +15,6 @@ def load_action(action_id):
     return db["actions"].find_one({"_id": action_id})
 
 
-# Spusteni akce
-
-
-   
-
-# def execute_action(action, parameters):
-#     command = action["command"]
-#     for key, value in parameters.items():
-#         placeholder = f"{{{{{key}}}}}"
-#         command = command.replace(placeholder, str(value))
-    
-#     print(f"Executing command: {command}")
-#     # print(f"Parameters passed to command: {parameters}")  # Debugging purposes
-
-
-#     try:
-#         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-#         return True, result.stdout  # Úspěch, pokud příkaz proběhl bez chyby
-
-#     except subprocess.CalledProcessError as e:
-#         print(f"Command failed with error: {e}")
-#         return False, e.output
-
-
-# def execute_action(action, parameters):
-#     command = action["command"]
-#     command = replace_placeholders(command, parameters)
-#     # for key, value in parameters.items():
-#     #     placeholder = f"{{{{{key}}}}}"
-#     #     command = command.replace(placeholder, str(value))
-    
-#     print(f"Executing command: {command}")
-
-#     try:
-#         result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-#         output = result.stdout.strip()
-#         print(f"Výstup akce: {output}")  # Debugging purposes
-
-#         # Kontrola úspěšnosti na základě obsahu výstupu
-#         if not output:
-#             print("Výstup akce je prázdný. Akce považována za selhání.")
-#             return False, "Output was empty, action failed."
-
-#         # Dodatečná kontrola klíčových slov ve výstupu
-#         if "success_keywords" in action:
-#             print(f"Klíčová slova pro úspěch: {action['success_keywords']}")  # Debugging purposes
-            
-#             # Pokud žádné klíčové slovo není ve výstupu, akce je neúspěšná
-#             if not all(keyword in output for keyword in action["success_keywords"]):
-#                 print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
-#                 return False, output  # Vrací False, protože klíčová slova nebyla nalezena
-
-#         return True, output  # Úspěch, pokud výstup není prázdný a/nebo obsahuje klíčová slova
-
-#     except subprocess.CalledProcessError as e:
-#         print(f"Command failed with error: {e}")
-#         return False, e.output
-
-import subprocess
-import threading
-
 # Globální proměnná pro zastavení scénáře
 stop_scenario = False
 
@@ -86,9 +25,6 @@ def monitor_user_input():
     stop_scenario = True
     #print("Scénář byl ukončen uživatelem.")
 
-import os
-import signal
-import subprocess
 
 def execute_action(action, parameters):
     global stop_scenario
@@ -201,61 +137,6 @@ def execute_scenario(scenario_name, selected_network):
     print("Dokončeno provádění scénáře.")
 
 
-# def execute_scenario(scenario_name, selected_network):
-#     """Provádí kroky scénáře na základě definovaných podmínek a zpráv."""
-#     scenario = load_scenario_from_db(scenario_name)
-#     if not scenario:
-#         print(f"Scénář '{scenario_name}' nebyl nalezen v databázi.")
-#         return
-
-#     context = {"selected_network": selected_network, "target_ip": None}
-
-#     for step in scenario["steps"]:
-#         description = replace_placeholders(step["description"], context)
-#         print(f"\nProvádím krok {step['step_id']}: {description}")
-
-#         # Načtení akce pro tento krok
-#         action = load_action(step["action"])
-#         if not action:
-#             print(f"Akce '{step['action']}' nebyla nalezena v databázi.")
-#             break
-
-#         # Zkontrolujeme, zda jsou splněny podmínky pro tento krok
-#         if "conditions" in step and not evaluate_conditions(step["conditions"], context):
-#             print(step.get("failure_message", "Podmínky pro tento krok nejsou splněny. Ukončuji scénář."))
-#             break
-
-#         # Určení parametrů pro akci
-#         parameters = {key: context.get(value.strip("{{}}"), value) for key, value in step["parameters"].items()}
-
-#         # Provedení akce
-#         success, output = execute_action(action, parameters)
-
-#         # Aktualizace kontextu na základě výsledku akce
-#         update_context(context, step, output, success)
-
-#         # Získání zprávy pro úspěch a chybu
-#         success_message = step.get("success_message", "")
-#         failure_message = step.get("failure_message", "")
-
-#         # Provádíme nahrazení pro každý klíč v `context`
-#         for key, value in context.items():
-#             placeholder = f"{{{{{key}}}}}"  # Vytvoříme správný formát `{{target_ip}}`
-#             success_message = success_message.replace(placeholder, str(value))
-#             failure_message = failure_message.replace(placeholder, str(value))
-
-#         # Výpis úspěšné nebo chybové zprávy
-#         if success:
-#             print("Generovaná úspěšná zpráva:", success_message)  # Kontrolní výpis
-#             print(success_message)
-#         else:
-#             print("Generovaná chybová zpráva:", failure_message)  # Kontrolní výpis
-#             print(failure_message)
-#             break  # Ukončení scénáře v případě chyby
-
-#     print("Dokončeno provádění scénáře.")
-
-
 def evaluate_conditions(conditions, context):
     """Check if all conditions are met based on the current context."""
     for key, expected_value in conditions.items():
@@ -287,17 +168,6 @@ def update_context(context, step, output, success):
                 context[key] = output.strip() if output and output.strip() else None # Pokud je výstup prázdný, uložíme None  
             else:
                 context[key] = expression
-
-    #print("Aktualizovaný kontext po kroku:", context)  # Debugging  Výpis kontextu
-    
-
-
-
-# ZBYTECNE - smazat po otestovani
-# def execute_step(step, network):
-#     print(f"Provádím krok: {step['description']}")
-#     # Placeholder for execution logic
-#     # For example, depending on the step type, it might call scan_network_with_nmap or other functions
 
 def replace_placeholders(text, replacements):
     """
