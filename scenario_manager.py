@@ -122,8 +122,11 @@ def execute_scenario(scenario_name, selected_network):
         # Určení parametrů pro akci
         parameters = {key: context.get(value.strip("{{}}"), value) for key, value in step["parameters"].items()}
 
-        # Provedení akce
         success, output = execute_action(action, parameters)
+
+        if not success:
+            print("Akce selhala, scénář bude ukončen.")
+            break  # Ukončí scénář.
 
         # Aktualizace kontextu na základě výsledku akce
         update_context(context, step, output, success)
