@@ -73,12 +73,12 @@ def main():
                 print(f"Testovaná síť byla změněna na: {selected_network}")
 
         elif choice == "4":
-               # Retrieve scenarios so the user can select by indeqx
+            # Retrieve scenarios so the user can select by index
             scenarios = list_scenarios()
             if not scenarios:
                 print("Žádné dostupné scénáře nebyly nalezeny.")
                 continue
-            
+
             # Display scenario options with indexes
             print("\nDostupné scénáře:")
             for idx, scenario in enumerate(scenarios):
@@ -89,6 +89,24 @@ def main():
                 scenario_choice = int(input("Vyberte číslo scénáře k provedení: ")) - 1
                 if 0 <= scenario_choice < len(scenarios):
                     scenario_name = scenarios[scenario_choice]["name"]
+
+                    # Získání času čekání od uživatele
+                    wait_time = input("Zadejte počet sekund, po které má aplikace čekat před spuštěním: ")
+                    try:
+                        wait_time = int(wait_time)  # Ověření, že je vstup celé číslo
+                        if wait_time < 0:
+                            raise ValueError("Čas čekání musí být nezáporný.")
+                    except ValueError as e:
+                        print(f"Neplatná hodnota: {e}")
+                        continue
+
+                    # Čekání před spuštěním scénáře
+                    if wait_time > 0:
+                        print(f"Čekám {wait_time} sekund před spuštěním scénáře...")
+                        import time
+                        time.sleep(wait_time)
+
+                    # Spuštění scénáře
                     print(f"Spouštím scénář: {scenario_name}")
                     execute_scenario(scenario_name, selected_network)
 
@@ -96,7 +114,6 @@ def main():
                     print("Neplatná volba scénáře. Zadejte číslo zobrazeného scénáře.")
             except ValueError:
                 print("Prosím, zadejte platné číslo scénáře.")
-            #execute_scenario(scenario_name, selected_network)
 
         elif choice == "5":
             print("Ukončuji program.")

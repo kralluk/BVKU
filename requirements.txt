@@ -3,3 +3,4 @@ netifaces
 psutil
 python-nmap
 psycopg2-binary
+pexpect

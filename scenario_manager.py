@@ -1,5 +1,8 @@
 from database.mongodb import get_mongo_client
-import subprocess, threading, os, signal
+from operations import interact_with_ssh
+#from globals import stop_scenario
+from globals import stop_scenario_execution, check_scenario_status, reset_scenario_status
+import subprocess, threading, os, signal, time
 
 # Nacteni scenare z DB
 def load_scenario_from_db(scenario_name):
@@ -14,80 +17,108 @@ def load_action(action_id):
     db = client["cybertest_tool"]
     return db["actions"].find_one({"_id": action_id})
 
-
-# Globální proměnná pro zastavení scénáře
-stop_scenario = False
-
 def monitor_user_input():
     """Sleduje uživatelský vstup a zastaví scénář při stisknutí Enter."""
-    global stop_scenario
+    #global stop_scenario
     input("Stiskněte Enter pro ukončení scénáře...\n")
-    stop_scenario = True
+    stop_scenario_execution()
+    #stop_scenario = True
     #print("Scénář byl ukončen uživatelem.")
 
 
 def execute_action(action, parameters):
-    global stop_scenario
+    #global stop_scenario
     command = action["command"]
     command = replace_placeholders(command, parameters)
     
     print(f"Executing command: {command}")
 
-    # Spustíme proces v nové procesové skupině
-    process = subprocess.Popen(
-        command, 
-        shell=True, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE, 
-        text=True, 
-        preexec_fn=os.setsid  # Nastaví proces do nové skupiny
-    )
-    
-    try:
-        while process.poll() is None:  # Kontroluje, zda proces stále běží
-            if stop_scenario:
-                print("Scénář byl zastaven uživatelem. Ukončuji proces...")
-                
-                # Ukončíme celou procesovou skupinu
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                try:
-                    process.wait(timeout=3)  # Počká, jestli se proces ukončí
-                except subprocess.TimeoutExpired:
-                    print("Proces neodpovídá, bude ukončen silou.")
-                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                stdout, stderr = process.communicate()
-                combined_output = stdout.strip() + "\n" + stderr.strip()
-                print(f"Výstup akce: {combined_output}") # Debugging purposes
-                return True , combined_output
+    if command.startswith("ssh"):
+        output = []
 
+        def ssh_task():
+            success, ssh_output = interact_with_ssh(parameters, command)
+            output.append((success, ssh_output))  # Uložení výsledku do seznamu (kvůli uzávěře)
 
-        # Proces skončil normálně
-        stdout, stderr = process.communicate()
-        combined_output = stdout.strip() + "\n" + stderr.strip()
+        ssh_thread = threading.Thread(target=ssh_task, daemon=True)
+        ssh_thread.start()
+
+        # Čekáme na dokončení vlákna nebo přerušení scénáře
+        while ssh_thread.is_alive():
+            if check_scenario_status():
+                print("Scénář byl zastaven uživatelem. Ukončuji SSH relaci...")
+                break
+
+        # Pokud relace stále běží, ukončíme ji
+        if ssh_thread.is_alive():
+            time.sleep(2)  # Počkáme chvilku, aby se výstup stihl zpracovat
+            ssh_thread.join()  # Počkáme na ukončení
+
+        # Získáme výstup
+        if output:
+            success, ssh_output = output[0]
+            if not success:
+                return False, ssh_output
+            return True, ssh_output
+        else:
+            return False, "SSH relace nebyla úspěšná."
+
+    else:
+        # Spustíme proces v nové procesové skupině
+        process = subprocess.Popen(
+            command, 
+            shell=True, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True, 
+            preexec_fn=os.setsid  # Nastaví proces do nové skupiny
+        )
         
-        print(f"Výstup akce: {combined_output}")  # Debugging purposes
 
-        # Kontrola úspěšnosti na základě obsahu výstupu
-        if not stdout.strip() and not stderr.strip():
-            print("Výstup akce je prázdný. Akce považována za selhání.")
-            return False, "Output was empty, action failed."
+        try:
+            while process.poll() is None:  # Kontroluje, zda proces stále běží
+                if check_scenario_status():
+                    print("Scénář byl zastaven uživatelem. Ukončuji proces...")
+                    
+                    # Ukončíme celou procesovou skupinu
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                    try:
+                        process.wait(timeout=3)  # Počká, jestli se proces ukončí
+                    except subprocess.TimeoutExpired:
+                        print("Proces neodpovídá, bude ukončen silou.")
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    stdout, stderr = process.communicate()
+                    combined_output = stdout.strip() + "\n" + stderr.strip()
+                    print(f"Výstup akce: {combined_output}") # Debugging purposes
+                    return True , combined_output
 
-        if "success_keywords" in action:
-            print(f"Klíčová slova pro úspěch: {action['success_keywords']}")  # Debugging purposes
-            if not all(keyword in combined_output for keyword in action["success_keywords"]):
-                print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
-                return False, combined_output
 
-        return True, combined_output  # Úspěšná akce
+            # Proces skončil normálně
+            stdout, stderr = process.communicate()
+            combined_output = stdout.strip() + "\n" + stderr.strip()
+            
+            print(f"Výstup akce: {combined_output}")  # Debugging purposes
 
-    except Exception as e:
-        print(f"Došlo k chybě: {e}")
-        os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # Ukončení celé skupiny při chybě
-        return False, str(e)
+            # Kontrola úspěšnosti na základě obsahu výstupu
+            if not stdout.strip() and not stderr.strip(): 
+                print("Výstup akce je prázdný. Akce považována za selhání.")
+                return False, "Output was empty, action failed."
+
+            if "success_keywords" in action:
+                print(f"Klíčová slova pro úspěch: {action['success_keywords']}")  # Debugging purposes
+                if not all(keyword in combined_output for keyword in action["success_keywords"]):
+                    print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
+                    return False, combined_output
+
+            return True, combined_output  # Úspěšná akce
+
+        except Exception as e:
+            print(f"Došlo k chybě: {e}")
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # Ukončení celé skupiny při chybě
+            return False, str(e)
 
 def execute_scenario(scenario_name, selected_network):
-    global stop_scenario
-    stop_scenario = False  # Resetujeme globální proměnnou při každém spuštění scénáře
+    reset_scenario_status()
 
     scenario = load_scenario_from_db(scenario_name)
     if not scenario:
@@ -101,7 +132,7 @@ def execute_scenario(scenario_name, selected_network):
     context = {"selected_network": selected_network, "target_ip": None}
 
     for step in scenario["steps"]:
-        if stop_scenario:
+        if check_scenario_status():
             print("Scénář byl zastaven uživatelem.")
             break
 
@@ -132,10 +163,11 @@ def execute_scenario(scenario_name, selected_network):
         update_context(context, step, output, success)
 
         # Výpis zprávy o úspěchu nebo selhání
-        message = step.get("success_message" if success else "failure_message", "")
-        for key, value in context.items():
-            message = message.replace(f"{{{{{key}}}}}", str(value))
-        print(message)
+        if not check_scenario_status():
+            message = step.get("success_message" if success else "failure_message", "")
+            for key, value in context.items():
+                message = message.replace(f"{{{{{key}}}}}", str(value))
+            print(message)
 
     print("Dokončeno provádění scénáře.")
 
