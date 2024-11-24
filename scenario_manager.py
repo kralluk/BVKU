@@ -27,95 +27,173 @@ def monitor_user_input():
 
 
 def execute_action(action, parameters):
-    #global stop_scenario
     command = action["command"]
     command = replace_placeholders(command, parameters)
-    
     print(f"Executing command: {command}")
 
-    if command.startswith("ssh"):
-        output = []
+    output = []
 
-        def ssh_task():
-            success, ssh_output = interact_with_ssh(parameters, command)
-            output.append((success, ssh_output))  # Uložení výsledku do seznamu (kvůli uzávěře)
-
-        ssh_thread = threading.Thread(target=ssh_task, daemon=True)
-        ssh_thread.start()
-
-        # Čekáme na dokončení vlákna nebo přerušení scénáře
-        while ssh_thread.is_alive():
-            if check_scenario_status():
-                print("Scénář byl zastaven uživatelem. Ukončuji SSH relaci...")
-                break
-
-        # Pokud relace stále běží, ukončíme ji
-        if ssh_thread.is_alive():
-            time.sleep(2)  # Počkáme chvilku, aby se výstup stihl zpracovat
-            ssh_thread.join()  # Počkáme na ukončení
-
-        # Získáme výstup
-        if output:
-            success, ssh_output = output[0]
-            if not success:
-                return False, ssh_output
-            return True, ssh_output
+    def process_task():
+        """Zpracuje příkaz – buď lokální, nebo vzdálený SSH."""
+        if command.startswith("ssh"):
+            success, cmd_output = interact_with_ssh(parameters, command)
         else:
-            return False, "SSH relace nebyla úspěšná."
+            success, cmd_output = execute_local_command(command)
+        output.append((success, cmd_output))
 
+    # Spuštění procesu ve vlákně
+    process_thread = threading.Thread(target=process_task, daemon=True)
+    process_thread.start()
+
+    while process_thread.is_alive(): # Čekáme na dokončení procesu nebo přerušení scénáře
+        if check_scenario_status():
+            print("Scénář byl zastaven uživatelem. Ukončuji proces...") # Preruseni je zajisteno v konkretnich process funkcich
+            break
+
+    time.sleep(2)  # Počkáme chvilku, aby se výstup stihl zpracovat
+    process_thread.join()  # Po uplynutí timeoutu se vlákno ukončí
+
+        # Získání výsledku
+    if output and not check_scenario_status():
+        success, cmd_output = output[0]
+
+        # Kontrola výstupu
+        if not cmd_output.strip():
+            print("Výstup akce je prázdný. Akce považována za selhání.")
+            return False, "Output was empty, action failed."
+
+        if "success_keywords" in action:
+            print(f"Klíčová slova pro úspěch: {action['success_keywords']}")
+            if not all(keyword in cmd_output for keyword in action["success_keywords"]):
+                print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
+                return False, cmd_output
+
+        return success, cmd_output
     else:
-        # Spustíme proces v nové procesové skupině
-        process = subprocess.Popen(
-            command, 
-            shell=True, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=True, 
-            preexec_fn=os.setsid  # Nastaví proces do nové skupiny
-        )
+        return False, "Proces selhal nebo byl zastaven uživatelem."
+
+
+
+# def execute_action(action, parameters):
+#     #global stop_scenario
+#     command = action["command"]
+#     command = replace_placeholders(command, parameters)
+    
+#     print(f"Executing command: {command}")
+
+#     if command.startswith("ssh"):
+#         output = []
+
+#         def ssh_task():
+#             success, ssh_output = interact_with_ssh(parameters, command)
+#             output.append((success, ssh_output))  # Uložení výsledku do seznamu (kvůli uzávěře)
+
+#         ssh_thread = threading.Thread(target=ssh_task, daemon=True)
+#         ssh_thread.start()
+
+#         # Čekáme na dokončení vlákna nebo přerušení scénáře
+#         while ssh_thread.is_alive():
+#             if check_scenario_status():
+#                 print("Scénář byl zastaven uživatelem. Ukončuji SSH relaci...")
+#                 break
+
+#         # Pokud relace stále běží, ukončíme ji
+#         if ssh_thread.is_alive():
+#             time.sleep(2)  # Počkáme chvilku, aby se výstup stihl zpracovat
+#             ssh_thread.join()  # Počkáme na ukončení
+
+#         # Získáme výstup
+#         if output:
+#             success, ssh_output = output[0]
+#             if not success:
+#                 return False, ssh_output
+#             return True, ssh_output
+#         else:
+#             return False, "SSH relace nebyla úspěšná."
+
+#     else:
+#         # Spustíme proces v nové procesové skupině
+#         process = subprocess.Popen(
+#             command, 
+#             shell=True, 
+#             stdout=subprocess.PIPE, 
+#             stderr=subprocess.PIPE, 
+#             text=True, 
+#             preexec_fn=os.setsid  # Nastaví proces do nové skupiny
+#         )
         
 
-        try:
-            while process.poll() is None:  # Kontroluje, zda proces stále běží
-                if check_scenario_status():
-                    print("Scénář byl zastaven uživatelem. Ukončuji proces...")
+#         try:
+#             while process.poll() is None:  # Kontroluje, zda proces stále běží
+#                 if check_scenario_status():
+#                     print("Scénář byl zastaven uživatelem. Ukončuji proces...")
                     
-                    # Ukončíme celou procesovou skupinu
-                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                    try:
-                        process.wait(timeout=3)  # Počká, jestli se proces ukončí
-                    except subprocess.TimeoutExpired:
-                        print("Proces neodpovídá, bude ukončen silou.")
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    stdout, stderr = process.communicate()
-                    combined_output = stdout.strip() + "\n" + stderr.strip()
-                    print(f"Výstup akce: {combined_output}") # Debugging purposes
-                    return True , combined_output
+#                     # Ukončíme celou procesovou skupinu
+#                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+#                     try:
+#                         process.wait(timeout=3)  # Počká, jestli se proces ukončí
+#                     except subprocess.TimeoutExpired:
+#                         print("Proces neodpovídá, bude ukončen silou.")
+#                         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+#                     stdout, stderr = process.communicate()
+#                     combined_output = stdout.strip() + "\n" + stderr.strip()
+#                     print(f"Výstup akce: {combined_output}") # Debugging purposes
+#                     return True , combined_output
 
 
-            # Proces skončil normálně
-            stdout, stderr = process.communicate()
-            combined_output = stdout.strip() + "\n" + stderr.strip()
+#             # Proces skončil normálně
+#             stdout, stderr = process.communicate()
+#             combined_output = stdout.strip() + "\n" + stderr.strip()
             
-            print(f"Výstup akce: {combined_output}")  # Debugging purposes
+#             print(f"Výstup akce: {combined_output}")  # Debugging purposes
 
-            # Kontrola úspěšnosti na základě obsahu výstupu
-            if not stdout.strip() and not stderr.strip(): 
-                print("Výstup akce je prázdný. Akce považována za selhání.")
-                return False, "Output was empty, action failed."
+#             # Kontrola úspěšnosti na základě obsahu výstupu
+#             if not stdout.strip() and not stderr.strip(): 
+#                 print("Výstup akce je prázdný. Akce považována za selhání.")
+#                 return False, "Output was empty, action failed."
 
-            if "success_keywords" in action:
-                print(f"Klíčová slova pro úspěch: {action['success_keywords']}")  # Debugging purposes
-                if not all(keyword in combined_output for keyword in action["success_keywords"]):
-                    print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
-                    return False, combined_output
+#             if "success_keywords" in action:
+#                 print(f"Klíčová slova pro úspěch: {action['success_keywords']}")  # Debugging purposes
+#                 if not all(keyword in combined_output for keyword in action["success_keywords"]):
+#                     print("Výstup neobsahuje žádné z klíčových slov pro úspěch. Akce považována za selhání.")
+#                     return False, combined_output
 
-            return True, combined_output  # Úspěšná akce
+#             return True, combined_output  # Úspěšná akce
 
-        except Exception as e:
-            print(f"Došlo k chybě: {e}")
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # Ukončení celé skupiny při chybě
-            return False, str(e)
+#         except Exception as e:
+#             print(f"Došlo k chybě: {e}")
+#             os.killpg(os.getpgid(process.pid), signal.SIGKILL)  # Ukončení celé skupiny při chybě
+#             return False, str(e)
+
+def execute_local_command(command):
+    try:
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            preexec_fn=os.setsid  # Nastaví proces do nové skupiny
+        )
+
+        output = ""
+        while process.poll() is None:
+            if check_scenario_status():
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                return False, "Lokální proces byl zastaven uživatelem."
+            time.sleep(0.5)
+
+        stdout, stderr = process.communicate()
+        output = stdout.strip() + "\n" + stderr.strip()
+
+        if process.returncode != 0:
+            return False, output
+
+        return True, output
+    except Exception as e:
+        return False, str(e)
+
+
 
 def execute_scenario(scenario_name, selected_network):
     reset_scenario_status()
@@ -155,8 +233,8 @@ def execute_scenario(scenario_name, selected_network):
 
         success, output = execute_action(action, parameters)
 
-        if not success:
-            print("Akce selhala, scénář bude ukončen.")
+        if not success and not check_scenario_status():
+            print(step.get("failure_message", "Akce selhala. Ukončuji scénář."))
             break  # Ukončí scénář.
 
         # Aktualizace kontextu na základě výsledku akce
@@ -169,7 +247,7 @@ def execute_scenario(scenario_name, selected_network):
                 message = message.replace(f"{{{{{key}}}}}", str(value))
             print(message)
 
-    print("Dokončeno provádění scénáře.")
+    print("\n Dokončeno provádění scénáře. \n")
 
 
 def evaluate_conditions(conditions, context):

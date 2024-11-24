@@ -15,7 +15,7 @@ def interact_with_ssh(parameters, ssh_command):
     try:
         # Spuštění SSH relace
         child = pexpect.spawn(ssh_command, timeout=30, encoding='utf-8')
-        #child.logfile = sys.stdout  # Logování výstupu pro ladění
+        # child.logfile = sys.stdout  # Logování výstupu pro ladění
         print("Připojuji se přes SSH...")
 
         # Smyčka pro zpracování relace
@@ -29,6 +29,7 @@ def interact_with_ssh(parameters, ssh_command):
                     r"yes/no",               # Nový host key
                     f"Welcome",          # Shell prompt po přihlášení
                     r"\[sudo\] password for",  # Výzva pro sudo heslo
+                    r"hping in flood mode",  # Hping byl spuštěn v flood módu
                     pexpect.EOF,             # Konec relace
                     pexpect.TIMEOUT          # Timeout bez výstupu
                 ], timeout=2)
@@ -57,17 +58,19 @@ def interact_with_ssh(parameters, ssh_command):
                         print(f"Spouštím vzdálený příkaz: {remote_command}")
                         child.sendline(remote_command)
                         remote_command_sent = True  # Zabráníme opakování
-
-                elif match_index == 3:  # "[sudo] password for"
+                elif match_index == 3:
+                    print("Ping flood byl spuštěn.")
+                elif match_index == 4:  # "[sudo] password for"
                     print("Zadávám heslo pro sudo...")
                     child.sendline(ssh_password)
 
-                elif match_index == 4:  # EOF
+                elif match_index == 5:  # EOF
                     print("Relace byla ukončena.")
                     break
 
-                elif match_index == 5:  # TIMEOUT
-                    print("Žádný nový výstup, čekám...")
+                # elif match_index == 5:  # TIMEOUT
+                    # Pripadne dodelat co se stane kdyz se nic nestane
+                    # print("Žádný nový výstup, čekám...")
 
             except pexpect.exceptions.TIMEOUT:
                 continue 
@@ -81,3 +84,5 @@ def interact_with_ssh(parameters, ssh_command):
     except Exception as e:
         print(f"Chyba v SSH relaci: {e}")
         return False, str(e)
+
+        

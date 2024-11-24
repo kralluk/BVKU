@@ -11,7 +11,7 @@ def stop_scenario_execution():
     global stop_scenario
     with scenario_lock:
         stop_scenario = True
-        print("Scénář byl zastaven.")
+        # print("Scénář byl zastaven.")
 
 def check_scenario_status():
     """Vrátí aktuální stav stop_scenario, synchronizovaně."""

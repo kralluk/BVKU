@@ -3,6 +3,14 @@ from network.scanner import scan_network_with_nmap
 from database.mongodb import save_network_info_to_db, get_network_info
 from scenario_manager import execute_scenario
 from database.mongodb import get_mongo_client
+import time
+
+import sys
+import termios
+
+def flush_stdin():
+    termios.tcflush(sys.stdin, termios.TCIFLUSH)
+
 
 def choose_network():
     networks = get_network_info()
@@ -51,7 +59,8 @@ def main():
         print("3. Změnit testovanou síť")
         print("4. Spustit scénář útoku")
         print("5. Ukončit")
-        choice = input("Vyberte možnost: ")
+        flush_stdin()
+        choice = input("Vyberte možnost: ").strip()
 
         if choice == "1":
             print(f"Skenování sítě: {selected_network}")
@@ -103,7 +112,6 @@ def main():
                     # Čekání před spuštěním scénáře
                     if wait_time > 0:
                         print(f"Čekám {wait_time} sekund před spuštěním scénáře...")
-                        import time
                         time.sleep(wait_time)
 
                     # Spuštění scénáře

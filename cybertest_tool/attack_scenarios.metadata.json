@@ -1,1 +1,1 @@
-{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"ee7973f18a87496b99cdefe61bae4735","collectionName":"attack_scenarios","type":"collection"}
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"6cc4e4042f614105bdff87350a54d927","collectionName":"attack_scenarios","type":"collection"}
