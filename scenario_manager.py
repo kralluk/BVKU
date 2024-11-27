@@ -212,7 +212,7 @@ def execute_scenario(scenario_name, selected_network):
     for step in scenario["steps"]:
         if check_scenario_status():
             print("Scénář byl zastaven uživatelem.")
-            break
+            breakfpa
 
         description = replace_placeholders(step["description"], context)
         print(f"\nProvádím krok {step['step_id']}: {description}")
@@ -229,7 +229,7 @@ def execute_scenario(scenario_name, selected_network):
             break
 
         # Určení parametrů pro akci
-        parameters = {key: context.get(value.strip("{{}}"), value) for key, value in step["parameters"].items()}
+        parameters = {key: context.get(value.strip("{{}}"), value) for key, value in step["parameters"].items()} # Získání hodnot z kontextu nebo přímo
 
         success, output = execute_action(action, parameters)
 
