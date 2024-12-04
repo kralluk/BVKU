@@ -12,7 +12,7 @@ newgrp docker                   # Activate the group changes
 ## Installation
 - Get this repository
 ```
-cd DDoS_testbed/web_app/
+cd BVKU/
 python3 -m venv ./venv
 . venv/bin/activate
 ```
@@ -23,8 +23,6 @@ python3 -m pip install -r requirements.txt
 - Start the app
 ```
 python3 cli.py
-```
-- App is running on http://localhost:5000 
 
 ## Some notes
 
