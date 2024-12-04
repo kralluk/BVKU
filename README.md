@@ -23,7 +23,7 @@ python3 -m pip install -r requirements.txt
 - Start the app
 ```
 python3 cli.py
-
+```
 ## Some notes
 
 - IF you want to use Mongo-Express, default login is **admin** and **pass**.
